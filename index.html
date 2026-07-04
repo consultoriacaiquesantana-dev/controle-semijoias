@@ -334,7 +334,12 @@ input:focus,select:focus{border-color:var(--gold-soft)}
         <button data-v="5" onclick="segSel(this,'nparc')">5x</button>
         <button data-v="6" onclick="segSel(this,'nparc')">6x</button>
       </div>
-      <div class="hint">Cada parcela vira uma cobrança na aba Receber, com vencimento a cada 30 dias.</div>
+      <label>Como você recebe</label>
+      <div class="seg" id="seg-receb">
+        <button data-v="antecipado" onclick="segSel(this,'receb')">Cai na hora</button>
+        <button data-v="parcelado" onclick="segSel(this,'receb')">A cada 30 dias</button>
+      </div>
+      <div class="hint">Cai na hora (antecipação automática): a maquininha paga tudo de uma vez, com taxa maior — não gera nada na aba Receber; lembre de incluir a taxa no custo. A cada 30 dias: cada parcela vira uma cobrança na aba Receber.</div>
     </div>
 
     <label>Canal</label>
@@ -448,8 +453,9 @@ function abrirNova(){
   ["f-cliente","f-peca","f-venda","f-custo","f-tel"].forEach(id=>document.getElementById(id).value="");
   document.getElementById("f-data").value = hojeISO();
   preencherDatalist();
-  segReset("seg-pag"); segReset("seg-canal"); segReset("seg-nparc");
+  segReset("seg-pag"); segReset("seg-canal"); segReset("seg-nparc"); segReset("seg-receb");
   segSetVal("seg-pag","pix"); segSetVal("seg-canal","grupo"); segSetVal("seg-nparc","3");
+  segSetVal("seg-receb","antecipado");
   toggleParcelas();
   previewLucro();
   document.getElementById("overlay").classList.add("on");
@@ -469,9 +475,10 @@ function abrirEdicao(id){
   document.getElementById("f-custo").value = String(v.custo).replace(".",",");
   document.getElementById("f-data").value = v.data;
   document.getElementById("f-status").value = String(v.status);
-  segReset("seg-pag"); segReset("seg-canal"); segReset("seg-nparc");
+  segReset("seg-pag"); segReset("seg-canal"); segReset("seg-nparc"); segReset("seg-receb");
   segSetVal("seg-pag", v.pagamento); segSetVal("seg-canal", v.canal);
   segSetVal("seg-nparc", String(v.nparc||3));
+  segSetVal("seg-receb", v.receb || (v.parcelas ? "parcelado" : "antecipado"));
   toggleParcelas();
   previewLucro();
   document.getElementById("overlay").classList.add("on");
@@ -577,25 +584,28 @@ function salvarVenda(){
   if(pagamento==="cartao" && !cliente){ toast("Venda parcelada precisa do nome da cliente"); return; }
 
   const nparc = pagamento==="cartao" ? parseInt(segVal("seg-nparc")||"3",10) : null;
+  const receb = pagamento==="cartao" ? (segVal("seg-receb")||"antecipado") : null;
+  const geraParcelas = pagamento==="cartao" && receb==="parcelado";
 
   if(editandoId){
     const v = vendas.find(x=>x.id===editandoId);
     const mudouPag = v.pagamento !== pagamento;
     const mudouValor = v.venda !== venda;
     const mudouN = v.nparc !== nparc;
-    Object.assign(v,{cliente,peca,venda,custo,data,pagamento,canal,nparc,tel});
+    const mudouReceb = v.receb !== receb;
+    Object.assign(v,{cliente,peca,venda,custo,data,pagamento,canal,nparc,tel,receb});
     v.status = parseInt(document.getElementById("f-status").value,10);
-    if(pagamento === "cartao"){
-      if(mudouPag || mudouValor || mudouN || !v.parcelas) v.parcelas = gerarParcelas(venda,data,nparc);
+    if(geraParcelas){
+      if(mudouPag || mudouValor || mudouN || mudouReceb || !v.parcelas) v.parcelas = gerarParcelas(venda,data,nparc);
     } else {
       v.parcelas = null;
     }
   } else {
     vendas.unshift({
       id: Date.now().toString(36)+Math.random().toString(36).slice(2,6),
-      cliente, peca, venda, custo, data, pagamento, canal, nparc, tel,
+      cliente, peca, venda, custo, data, pagamento, canal, nparc, tel, receb,
       status: 0,
-      parcelas: pagamento==="cartao" ? gerarParcelas(venda,data,nparc) : null
+      parcelas: geraParcelas ? gerarParcelas(venda,data,nparc) : null
     });
   }
   persistir();
