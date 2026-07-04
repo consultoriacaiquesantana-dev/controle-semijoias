@@ -216,6 +216,26 @@ input:focus,select:focus{border-color:var(--gold-soft)}
   border:1px solid var(--gold-soft);background:rgba(217,176,108,.08);color:var(--gold);
   border-radius:10px;padding:8px 12px;font-family:'Jost',sans-serif;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;text-align:center;text-decoration:none;
 }
+
+.item-row{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:10px;margin-bottom:10px}
+.item-row .row-nome{display:flex;gap:8px}
+.item-row .row-nome input{flex:1}
+.item-row select{margin-top:8px}
+.item-row .row{margin-top:8px}
+.it-remove{
+  border:1px solid var(--line);background:none;color:var(--ivory-dim);
+  border-radius:10px;width:44px;font-size:18px;cursor:pointer;
+}
+.add-item{width:100%;border-style:dashed;color:var(--gold);border-color:var(--gold-soft);background:none;margin-top:2px}
+.itens-lista{margin-top:8px;display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--ivory-dim)}
+.itens-lista div{display:flex;justify-content:space-between;gap:10px}
+.est-ctrl{display:flex;align-items:center;gap:12px}
+.est-ctrl button{
+  width:34px;height:34px;border-radius:10px;border:1px solid var(--line);
+  background:var(--surface2);color:var(--gold);font-size:17px;cursor:pointer;
+}
+.est-ctrl .n{min-width:20px;text-align:center;font-weight:500;font-variant-numeric:tabular-nums}
+.est-ctrl .n.zero{color:var(--ivory-dim)}
 </style>
 </head>
 <body>
@@ -230,6 +250,12 @@ input:focus,select:focus{border-color:var(--gold-soft)}
   <!-- ============ VENDAS ============ -->
   <section id="page-vendas" class="page on">
     <div id="lista-vendas"></div>
+  </section>
+
+  <!-- ============ PEÇAS ============ -->
+  <section id="page-pecas" class="page">
+    <button class="btn primary" style="width:100%;margin-bottom:14px" onclick="abrirNovaPeca()">+ Cadastrar peça</button>
+    <div id="lista-pecas"></div>
   </section>
 
   <!-- ============ RECEBER ============ -->
@@ -280,6 +306,7 @@ input:focus,select:focus{border-color:var(--gold-soft)}
 
 <nav>
   <button id="tab-vendas" class="on" onclick="irPara('vendas')">Vendas</button>
+  <button id="tab-pecas" onclick="irPara('pecas')">Peças</button>
   <button id="tab-receber" onclick="irPara('receber')">Receber</button>
   <button id="tab-resumo" onclick="irPara('resumo')">Resumo</button>
 </nav>
@@ -300,22 +327,13 @@ input:focus,select:focus{border-color:var(--gold-soft)}
     <input id="f-tel" type="tel" inputmode="tel" placeholder="DDD + número" autocomplete="off">
     <div class="hint">Com o número, cada venda ganha botão de conversa e cobrança pronta no WhatsApp. Clientes já registradas são sugeridas ao digitar o nome — só precisa preencher uma vez.</div>
 
-    <label>Peça</label>
-    <input id="f-peca" type="text" placeholder="Ex.: Colar ponto de luz banho ouro" autocomplete="off">
+    <label>Peças da venda</label>
+    <div id="itens-box"></div>
+    <button type="button" class="btn add-item" onclick="addItemRow()">+ Adicionar outra peça</button>
+    <datalist id="dl-pecas"></datalist>
+    <div class="hint">Custo = fornecedor + taxa de cartão + frete, por peça. Peça já cadastrada preenche tipo e custo sozinha; se ela tiver estoque, a venda baixa 1 automaticamente.</div>
 
-    <div class="row">
-      <div>
-        <label>Valor de venda</label>
-        <input id="f-venda" type="text" inputmode="decimal" placeholder="0,00" oninput="previewLucro()">
-      </div>
-      <div>
-        <label>Custo total</label>
-        <input id="f-custo" type="text" inputmode="decimal" placeholder="0,00" oninput="previewLucro()">
-      </div>
-    </div>
-    <div class="hint">Custo = fornecedor + taxa de cartão + frete. Tudo que sai do seu bolso nessa venda.</div>
-
-    <div class="lucro-preview"><span>Lucro desta venda</span><b id="f-lucro-preview">R$ 0,00</b></div>
+    <div class="lucro-preview"><span>Lucro total da venda</span><b id="f-lucro-preview">R$ 0,00</b></div>
 
     <label>Pagamento</label>
     <div class="seg" id="seg-pag">
@@ -371,6 +389,37 @@ input:focus,select:focus{border-color:var(--gold-soft)}
   </div>
 </div>
 
+<!-- ============ MODAL PEÇA ============ -->
+<div class="overlay" id="overlay-peca" onclick="if(event.target===this)fecharModalPeca()">
+  <div class="sheet">
+    <h2 id="modal-peca-titulo">Cadastrar peça</h2>
+
+    <label>Nome da peça</label>
+    <input id="p-nome" type="text" placeholder="Ex.: Colar ponto de luz banho ouro" autocomplete="off">
+
+    <label>Tipo</label>
+    <select id="p-tipo"><option value="">Escolher tipo</option></select>
+
+    <div class="row">
+      <div>
+        <label>Custo padrão</label>
+        <input id="p-custo" type="text" inputmode="decimal" placeholder="0,00" oninput="moeda(this)">
+      </div>
+      <div>
+        <label>Estoque</label>
+        <input id="p-estoque" type="number" inputmode="numeric" placeholder="0" min="0">
+      </div>
+    </div>
+    <div class="hint">Estoque zero = peça de encomenda (normal no seu fluxo). Só coloque estoque nas sobras e peças da maleta.</div>
+
+    <div class="actions">
+      <button class="btn danger" id="btn-excluir-peca" style="display:none" onclick="excluirPeca()">Excluir</button>
+      <button class="btn" onclick="fecharModalPeca()">Cancelar</button>
+      <button class="btn primary" onclick="salvarPeca()">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -378,6 +427,7 @@ input:focus,select:focus{border-color:var(--gold-soft)}
 
 // ================= dados =================
 const KEY = "semijoias_vendas_v1";
+const KEY_P = "semijoias_pecas_v1";
 const KEY_BK = "semijoias_backup_ts";
 const STATUS = ["Encomendado","Pago","Pedido ao fornecedor","Recebido","Entregue"];
 const PAG_LABEL = {pix:"Pix",avista:"Cartão à vista",dinheiro:"Dinheiro"};
@@ -388,22 +438,31 @@ function pagLabel(v){
 const CANAL_LABEL = {grupo:"Grupo VIP",direto:"Direto",outro:"Outro"};
 
 let vendas = [];
+const TIPOS = ["Colar","Anel","Brinco","Conjunto","Pulseira","Bracelete","Pingente","Piercing fake"];
+let pecas = [];
+let editandoPecaId = null;
 let editandoId = null;
 let mesAtual = new Date();
 
 function carregar(){
   try{ vendas = JSON.parse(localStorage.getItem(KEY)) || []; }
   catch(e){ vendas = []; }
-  // migração: vendas antigas salvas como "3x"
+  try{ pecas = JSON.parse(localStorage.getItem(KEY_P)) || []; }
+  catch(e){ pecas = []; }
+  // migração: vendas antigas salvas como "3x" e formato de item único
   let mudou = false;
   vendas.forEach(v=>{
     if(v.pagamento==="3x"){ v.pagamento="cartao"; v.nparc=3; mudou=true; }
     if(v.pagamento==="cartao" && !v.nparc){ v.nparc = (v.parcelas&&v.parcelas.length)||3; mudou=true; }
+    if(!v.itens){ v.itens = [{peca:v.peca||"", tipo:null, venda:v.venda||0, custo:v.custo||0}]; mudou=true; }
   });
   if(mudou) persistir();
 }
 function persistir(){
   localStorage.setItem(KEY, JSON.stringify(vendas));
+}
+function persistirPecas(){
+  localStorage.setItem(KEY_P, JSON.stringify(pecas));
 }
 
 // ================= util =================
@@ -411,9 +470,26 @@ const fmt = new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"});
 function brl(n){ return fmt.format(n||0); }
 function parseValor(s){
   if(!s) return 0;
-  s = String(s).replace(/[^\d,.-]/g,"").replace(/\./g,"").replace(",",".");
-  const n = parseFloat(s);
+  // só vírgula separa centavos; ponto digitado vira vírgula
+  s = String(s).replace(/\./g,",").replace(/[^0-9,]/g,"");
+  const parts = s.split(",");
+  let n;
+  if(parts.length > 1){
+    const dec = parts.pop().slice(0,2);
+    n = parseFloat(parts.join("") + "." + dec);
+  } else {
+    n = parseFloat(parts[0]);
+  }
   return isNaN(n) ? 0 : n;
+}
+function moeda(el){
+  let v = el.value.replace(/\./g,",").replace(/[^0-9,]/g,"");
+  const i = v.lastIndexOf(",");
+  if(i > -1) v = v.slice(0,i).replace(/,/g,"") + v.slice(i);
+  el.value = v;
+}
+function numToStr(n){
+  return String(n==null?"":n).replace(".",",");
 }
 function hojeISO(){
   const d = new Date();
@@ -437,7 +513,7 @@ function toast(msg){
 
 // ================= navegação =================
 function irPara(p){
-  ["vendas","receber","resumo"].forEach(x=>{
+  ["vendas","pecas","receber","resumo"].forEach(x=>{
     document.getElementById("page-"+x).classList.toggle("on", x===p);
     document.getElementById("tab-"+x).classList.toggle("on", x===p);
   });
@@ -450,7 +526,9 @@ function abrirNova(){
   document.getElementById("modal-titulo").textContent = "Nova venda";
   document.getElementById("btn-excluir").style.display = "none";
   document.getElementById("f-status-wrap").style.display = "none";
-  ["f-cliente","f-peca","f-venda","f-custo","f-tel"].forEach(id=>document.getElementById(id).value="");
+  ["f-cliente","f-tel"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("itens-box").innerHTML = "";
+  addItemRow();
   document.getElementById("f-data").value = hojeISO();
   preencherDatalist();
   segReset("seg-pag"); segReset("seg-canal"); segReset("seg-nparc"); segReset("seg-receb");
@@ -470,9 +548,9 @@ function abrirEdicao(id){
   document.getElementById("f-cliente").value = v.cliente;
   document.getElementById("f-tel").value = v.tel||"";
   preencherDatalist();
-  document.getElementById("f-peca").value = v.peca;
-  document.getElementById("f-venda").value = String(v.venda).replace(".",",");
-  document.getElementById("f-custo").value = String(v.custo).replace(".",",");
+  document.getElementById("itens-box").innerHTML = "";
+  const its = (v.itens && v.itens.length) ? v.itens : [{peca:v.peca,tipo:null,venda:v.venda,custo:v.custo}];
+  its.forEach(it=>addItemRow(it));
   document.getElementById("f-data").value = v.data;
   document.getElementById("f-status").value = String(v.status);
   segReset("seg-pag"); segReset("seg-canal"); segReset("seg-nparc"); segReset("seg-receb");
@@ -502,12 +580,63 @@ function segVal(id){
   return b ? b.dataset.v : null;
 }
 function previewLucro(){
-  const vv = parseValor(document.getElementById("f-venda").value);
-  const l = vv - parseValor(document.getElementById("f-custo").value);
+  const itens = lerItens();
+  const vv = itens.reduce((s,i)=>s+i.venda,0);
+  const l = vv - itens.reduce((s,i)=>s+i.custo,0);
   const pct = vv > 0 ? Math.round((l/vv)*100) : 0;
   const el = document.getElementById("f-lucro-preview");
   el.textContent = brl(l) + (vv>0 ? " · "+pct+"%" : "");
   el.style.color = l >= 0 ? "var(--green)" : "var(--red)";
+}
+
+// ================= itens da venda =================
+function addItemRow(d){
+  d = d || {};
+  const box = document.getElementById("itens-box");
+  const div = document.createElement("div");
+  div.className = "item-row";
+  div.innerHTML =
+    '<div class="row-nome">'
+    +'<input class="it-nome" type="text" placeholder="Nome da peça" list="dl-pecas" autocomplete="off" oninput="pecaAuto(this)" onchange="pecaAuto(this)">'
+    +'<button type="button" class="it-remove" onclick="removerItem(this)">×</button>'
+    +'</div>'
+    +'<select class="it-tipo"><option value="">Tipo da peça</option>'
+    + TIPOS.map(t=>'<option>'+t+'</option>').join("")
+    +'</select>'
+    +'<div class="row">'
+    +'<input class="it-venda" type="text" inputmode="decimal" placeholder="Venda 0,00" oninput="moeda(this);previewLucro()">'
+    +'<input class="it-custo" type="text" inputmode="decimal" placeholder="Custo 0,00" oninput="moeda(this);previewLucro()">'
+    +'</div>';
+  box.appendChild(div);
+  if(d.peca) div.querySelector(".it-nome").value = d.peca;
+  if(d.tipo) div.querySelector(".it-tipo").value = d.tipo;
+  if(d.venda != null && d.venda !== 0) div.querySelector(".it-venda").value = numToStr(d.venda);
+  if(d.custo != null && d.custo !== 0) div.querySelector(".it-custo").value = numToStr(d.custo);
+}
+function removerItem(btn){
+  const box = document.getElementById("itens-box");
+  if(box.querySelectorAll(".item-row").length <= 1){ toast("A venda precisa de pelo menos 1 peça"); return; }
+  btn.closest(".item-row").remove();
+  previewLucro();
+}
+function lerItens(){
+  return [...document.querySelectorAll("#itens-box .item-row")].map(r=>({
+    peca: r.querySelector(".it-nome").value.trim(),
+    tipo: r.querySelector(".it-tipo").value || null,
+    venda: parseValor(r.querySelector(".it-venda").value),
+    custo: parseValor(r.querySelector(".it-custo").value)
+  }));
+}
+function pecaAuto(inp){
+  const nome = inp.value.trim().toLowerCase();
+  if(!nome) return;
+  const p = pecas.find(x=>x.nome.toLowerCase()===nome);
+  if(!p) return;
+  const row = inp.closest(".item-row");
+  const tipoEl = row.querySelector(".it-tipo");
+  const custoEl = row.querySelector(".it-custo");
+  if(p.tipo && !tipoEl.value) tipoEl.value = p.tipo;
+  if(p.custo && !custoEl.value){ custoEl.value = numToStr(p.custo); previewLucro(); }
 }
 
 // ================= salvar / excluir =================
@@ -542,6 +671,39 @@ function clientesUnicos(){
 function preencherDatalist(){
   document.getElementById("dl-clientes").innerHTML =
     clientesUnicos().map(c=>'<option value="'+esc(c.nome)+'">').join("");
+  document.getElementById("dl-pecas").innerHTML =
+    pecas.map(p=>'<option value="'+esc(p.nome)+'">').join("");
+}
+
+// ================= catálogo de peças =================
+function findPeca(nome){
+  const k = String(nome||"").trim().toLowerCase();
+  return pecas.find(p=>p.nome.toLowerCase()===k) || null;
+}
+function registrarPeca(nome, tipo, custo){
+  nome = String(nome||"").trim();
+  if(!nome) return null;
+  let p = findPeca(nome);
+  if(!p){
+    p = {id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, tipo:tipo||null, custo:custo||0, estoque:0};
+    pecas.unshift(p);
+  } else {
+    if(tipo) p.tipo = tipo;
+    if(custo) p.custo = custo;
+  }
+  persistirPecas();
+  return p;
+}
+function baixarEstoque(nome){
+  const p = findPeca(nome);
+  if(p && (p.estoque||0) > 0){ p.estoque--; persistirPecas(); }
+}
+function ajustarEstoqueId(id, delta){
+  const p = pecas.find(x=>x.id===id);
+  if(!p) return;
+  p.estoque = Math.max(0,(p.estoque||0)+delta);
+  persistirPecas();
+  renderPecas();
 }
 function autoTel(){
   const nome = document.getElementById("f-cliente").value.trim().toLowerCase();
@@ -572,15 +734,16 @@ function waHref(tel, msg){
 
 function salvarVenda(){
   const cliente = document.getElementById("f-cliente").value.trim();
-  const peca = document.getElementById("f-peca").value.trim();
-  const venda = parseValor(document.getElementById("f-venda").value);
-  const custo = parseValor(document.getElementById("f-custo").value);
+  const itens = lerItens();
+  const venda = itens.reduce((s,i)=>s+i.venda,0);
+  const custo = itens.reduce((s,i)=>s+i.custo,0);
+  const peca = itens.length ? itens[0].peca : "";
   const data = document.getElementById("f-data").value || hojeISO();
   const pagamento = segVal("seg-pag") || "pix";
   const canal = segVal("seg-canal") || "grupo";
   const tel = document.getElementById("f-tel").value.trim();
 
-  if(!peca || venda <= 0){ toast("Preencha a peça e o valor"); return; }
+  if(itens.length===0 || itens.some(i=>!i.peca || i.venda<=0)){ toast("Preencha nome e valor de cada peça"); return; }
   if(pagamento==="cartao" && !cliente){ toast("Venda parcelada precisa do nome da cliente"); return; }
 
   const nparc = pagamento==="cartao" ? parseInt(segVal("seg-nparc")||"3",10) : null;
@@ -593,8 +756,9 @@ function salvarVenda(){
     const mudouValor = v.venda !== venda;
     const mudouN = v.nparc !== nparc;
     const mudouReceb = v.receb !== receb;
-    Object.assign(v,{cliente,peca,venda,custo,data,pagamento,canal,nparc,tel,receb});
+    Object.assign(v,{cliente,peca,venda,custo,data,pagamento,canal,nparc,tel,receb,itens});
     v.status = parseInt(document.getElementById("f-status").value,10);
+    itens.forEach(it=>registrarPeca(it.peca, it.tipo, it.custo));
     if(geraParcelas){
       if(mudouPag || mudouValor || mudouN || mudouReceb || !v.parcelas) v.parcelas = gerarParcelas(venda,data,nparc);
     } else {
@@ -603,9 +767,13 @@ function salvarVenda(){
   } else {
     vendas.unshift({
       id: Date.now().toString(36)+Math.random().toString(36).slice(2,6),
-      cliente, peca, venda, custo, data, pagamento, canal, nparc, tel, receb,
+      cliente, peca, venda, custo, data, pagamento, canal, nparc, tel, receb, itens,
       status: 0,
       parcelas: geraParcelas ? gerarParcelas(venda,data,nparc) : null
+    });
+    itens.forEach(it=>{
+      registrarPeca(it.peca, it.tipo, it.custo);
+      baixarEstoque(it.peca);
     });
   }
   persistir();
@@ -642,6 +810,7 @@ function pagarParcela(idVenda, idx){
 // ================= render =================
 function render(){
   renderVendas();
+  renderPecas();
   renderReceber();
   renderResumo();
   const ts = localStorage.getItem(KEY_BK);
@@ -676,15 +845,21 @@ function esc(s){
 function cardVenda(v){
   const lucro = v.venda - v.custo;
   const done = v.status===4;
+  const its = (v.itens && v.itens.length) ? v.itens : [{peca:v.peca,venda:v.venda}];
+  const titulo = its.length>1 ? its.length+" peças" : (its[0].peca||"—");
+  const linhas = its.length>1
+    ? '<div class="itens-lista">'+its.map(i=>'<div><span>'+esc(i.peca)+'</span><span class="num">'+brl(i.venda)+'</span></div>').join("")+'</div>'
+    : '';
   const stBtn = done
     ? '<button class="status-btn done">Entregue ✓</button>'
     : '<button class="status-btn" onclick="avancarStatus(\''+v.id+'\')">'+STATUS[v.status]+' →</button>';
   const wa = waHref(v.tel);
   const waBtn = wa ? '<a class="wa-btn" href="'+wa+'" target="_blank" rel="noopener">WhatsApp</a>' : '';
   return '<div class="card">'
-    +'<div class="top"><div><div class="peca">'+esc(v.peca)+'</div>'
+    +'<div class="top"><div><div class="peca">'+esc(titulo)+'</div>'
     +'<div class="cliente">'+esc(v.cliente||"—")+' · '+fmtData(v.data)+'</div></div>'
     +'<div class="valor num">'+brl(v.venda)+'</div></div>'
+    +linhas
     +'<div class="meta">'+stBtn+waBtn
     +'<span class="tag pay">'+pagLabel(v)+'</span>'
     +'<span class="tag">'+CANAL_LABEL[v.canal]+'</span>'
@@ -766,9 +941,95 @@ function renderResumo(){
   document.getElementById("res-receber").textContent = brl(receber);
 }
 
+// ================= peças (aba) =================
+function renderPecas(){
+  const box = document.getElementById("lista-pecas");
+  if(pecas.length===0){
+    box.innerHTML = '<div class="empty"><span class="serif">Nenhuma peça cadastrada</span>Toda peça vendida entra aqui sozinha. Ou cadastre manualmente as sobras e peças da maleta com estoque.</div>';
+    return;
+  }
+  box.innerHTML = pecas.map(p=>{
+    const est = p.estoque||0;
+    return '<div class="parc">'
+      +'<div style="flex:1;min-width:0"><div class="who">'+esc(p.nome)+'</div>'
+      +'<div class="venc">'+(p.tipo||"sem tipo")+(p.custo?' · custo '+brl(p.custo):'')+'</div></div>'
+      +'<div class="est-ctrl">'
+      +'<button onclick="ajustarEstoqueId(\''+p.id+'\',-1)">−</button>'
+      +'<span class="n num'+(est===0?' zero':'')+'">'+est+'</span>'
+      +'<button onclick="ajustarEstoqueId(\''+p.id+'\',1)">+</button>'
+      +'</div>'
+      +'<button class="edit-link" onclick="abrirEdicaoPeca(\''+p.id+'\')">editar</button>'
+      +'</div>';
+  }).join("");
+}
+function abrirNovaPeca(){
+  editandoPecaId = null;
+  document.getElementById("modal-peca-titulo").textContent = "Cadastrar peça";
+  document.getElementById("btn-excluir-peca").style.display = "none";
+  document.getElementById("p-nome").value = "";
+  document.getElementById("p-custo").value = "";
+  document.getElementById("p-estoque").value = "";
+  montarTiposSelect();
+  document.getElementById("p-tipo").value = "";
+  document.getElementById("overlay-peca").classList.add("on");
+}
+function abrirEdicaoPeca(id){
+  const p = pecas.find(x=>x.id===id);
+  if(!p) return;
+  editandoPecaId = id;
+  document.getElementById("modal-peca-titulo").textContent = "Editar peça";
+  document.getElementById("btn-excluir-peca").style.display = "block";
+  montarTiposSelect();
+  document.getElementById("p-nome").value = p.nome;
+  document.getElementById("p-tipo").value = p.tipo||"";
+  document.getElementById("p-custo").value = p.custo ? numToStr(p.custo) : "";
+  document.getElementById("p-estoque").value = p.estoque||0;
+  document.getElementById("overlay-peca").classList.add("on");
+}
+function montarTiposSelect(){
+  const sel = document.getElementById("p-tipo");
+  if(sel.options.length <= 1){
+    TIPOS.forEach(t=>{
+      const o = document.createElement("option");
+      o.textContent = t;
+      sel.appendChild(o);
+    });
+  }
+}
+function fecharModalPeca(){
+  document.getElementById("overlay-peca").classList.remove("on");
+}
+function salvarPeca(){
+  const nome = document.getElementById("p-nome").value.trim();
+  if(!nome){ toast("Dê um nome pra peça"); return; }
+  const tipo = document.getElementById("p-tipo").value || null;
+  const custo = parseValor(document.getElementById("p-custo").value);
+  const estoque = Math.max(0, parseInt(document.getElementById("p-estoque").value,10)||0);
+  if(editandoPecaId){
+    const p = pecas.find(x=>x.id===editandoPecaId);
+    if(p) Object.assign(p,{nome,tipo,custo,estoque});
+  } else {
+    if(findPeca(nome)){ toast("Já existe peça com esse nome"); return; }
+    pecas.unshift({id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, tipo, custo, estoque});
+  }
+  persistirPecas();
+  fecharModalPeca();
+  renderPecas();
+  toast("Peça salva");
+}
+function excluirPeca(){
+  if(!editandoPecaId) return;
+  if(!confirm("Excluir esta peça do catálogo? As vendas já feitas não mudam.")) return;
+  pecas = pecas.filter(x=>x.id!==editandoPecaId);
+  persistirPecas();
+  fecharModalPeca();
+  renderPecas();
+  toast("Peça excluída");
+}
+
 // ================= backup =================
 function exportarBackup(){
-  const blob = new Blob([JSON.stringify({exportado:new Date().toISOString(),vendas},null,2)],{type:"application/json"});
+  const blob = new Blob([JSON.stringify({exportado:new Date().toISOString(),vendas,pecas},null,2)],{type:"application/json"});
   const url = URL.createObjectURL(blob);
   const aEl = document.createElement("a");
   aEl.href = url;
@@ -793,7 +1054,10 @@ function importarBackup(input){
       if(!Array.isArray(lista)) throw new Error("formato");
       if(!confirm("Importar "+lista.length+" vendas? Isso substitui os dados atuais.")) return;
       vendas = lista;
-      persistir(); render();
+      if(Array.isArray(data.pecas)) pecas = data.pecas;
+      persistir(); persistirPecas();
+      carregar();
+      render();
       toast("Backup importado");
     }catch(e){
       toast("Arquivo inválido");
