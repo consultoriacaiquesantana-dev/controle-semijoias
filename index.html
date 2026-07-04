@@ -199,6 +199,23 @@ input:focus,select:focus{border-color:var(--gold-soft)}
   margin:20px 0 10px;display:flex;align-items:center;gap:10px;
 }
 .section-title::after{content:"";flex:1;height:1px;background:var(--line)}
+
+.cliente-row{display:flex;gap:8px}
+.cliente-row input{flex:1}
+.btn-contato{
+  border:1px solid var(--gold-soft);background:rgba(217,176,108,.08);color:var(--gold);
+  border-radius:10px;padding:0 13px;font-family:'Jost',sans-serif;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;
+}
+.wa-btn{
+  font-family:'Jost',sans-serif;font-size:11px;letter-spacing:.06em;font-weight:500;
+  padding:5px 11px;border-radius:99px;border:1px solid var(--green);
+  background:rgba(127,191,149,.08);color:var(--green);cursor:pointer;text-decoration:none;display:inline-block;
+}
+.parc-actions{display:flex;flex-direction:column;gap:6px;align-items:stretch}
+.parc-actions .cobrar{
+  border:1px solid var(--gold-soft);background:rgba(217,176,108,.08);color:var(--gold);
+  border-radius:10px;padding:8px 12px;font-family:'Jost',sans-serif;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;text-align:center;text-decoration:none;
+}
 </style>
 </head>
 <body>
@@ -273,7 +290,15 @@ input:focus,select:focus{border-color:var(--gold-soft)}
     <h2 id="modal-titulo">Nova venda</h2>
 
     <label>Cliente</label>
-    <input id="f-cliente" type="text" placeholder="Nome da cliente" autocomplete="off">
+    <div class="cliente-row">
+      <input id="f-cliente" type="text" placeholder="Nome da cliente" autocomplete="off" list="dl-clientes" oninput="autoTel()" onchange="autoTel()">
+      <button type="button" class="btn-contato" id="btn-contato" style="display:none" onclick="pegarContato()">Contatos</button>
+    </div>
+    <datalist id="dl-clientes"></datalist>
+
+    <label>WhatsApp</label>
+    <input id="f-tel" type="tel" inputmode="tel" placeholder="DDD + número" autocomplete="off">
+    <div class="hint">Com o número, cada venda ganha botão de conversa e cobrança pronta no WhatsApp. Clientes já registradas são sugeridas ao digitar o nome — só precisa preencher uma vez.</div>
 
     <label>Peça</label>
     <input id="f-peca" type="text" placeholder="Ex.: Colar ponto de luz banho ouro" autocomplete="off">
@@ -420,8 +445,9 @@ function abrirNova(){
   document.getElementById("modal-titulo").textContent = "Nova venda";
   document.getElementById("btn-excluir").style.display = "none";
   document.getElementById("f-status-wrap").style.display = "none";
-  ["f-cliente","f-peca","f-venda","f-custo"].forEach(id=>document.getElementById(id).value="");
+  ["f-cliente","f-peca","f-venda","f-custo","f-tel"].forEach(id=>document.getElementById(id).value="");
   document.getElementById("f-data").value = hojeISO();
+  preencherDatalist();
   segReset("seg-pag"); segReset("seg-canal"); segReset("seg-nparc");
   segSetVal("seg-pag","pix"); segSetVal("seg-canal","grupo"); segSetVal("seg-nparc","3");
   toggleParcelas();
@@ -436,6 +462,8 @@ function abrirEdicao(id){
   document.getElementById("btn-excluir").style.display = "block";
   document.getElementById("f-status-wrap").style.display = "block";
   document.getElementById("f-cliente").value = v.cliente;
+  document.getElementById("f-tel").value = v.tel||"";
+  preencherDatalist();
   document.getElementById("f-peca").value = v.peca;
   document.getElementById("f-venda").value = String(v.venda).replace(".",",");
   document.getElementById("f-custo").value = String(v.custo).replace(".",",");
@@ -492,6 +520,49 @@ function toggleParcelas(){
   document.getElementById("parcelas-wrap").style.display = on ? "block" : "none";
 }
 
+// ================= clientes =================
+function clientesUnicos(){
+  const map = new Map();
+  vendas.forEach(v=>{
+    const nome = (v.cliente||"").trim();
+    if(!nome) return;
+    const k = nome.toLowerCase();
+    if(!map.has(k)) map.set(k,{nome, tel:v.tel||""});
+    else if(!map.get(k).tel && v.tel) map.get(k).tel = v.tel;
+  });
+  return [...map.values()];
+}
+function preencherDatalist(){
+  document.getElementById("dl-clientes").innerHTML =
+    clientesUnicos().map(c=>'<option value="'+esc(c.nome)+'">').join("");
+}
+function autoTel(){
+  const nome = document.getElementById("f-cliente").value.trim().toLowerCase();
+  if(!nome) return;
+  const c = clientesUnicos().find(x=>x.nome.toLowerCase()===nome);
+  const telEl = document.getElementById("f-tel");
+  if(c && c.tel && !telEl.value) telEl.value = c.tel;
+}
+async function pegarContato(){
+  try{
+    const sel = await navigator.contacts.select(["name","tel"],{multiple:false});
+    if(sel && sel[0]){
+      if(sel[0].name && sel[0].name[0]) document.getElementById("f-cliente").value = sel[0].name[0];
+      if(sel[0].tel && sel[0].tel[0]) document.getElementById("f-tel").value = sel[0].tel[0];
+    }
+  }catch(e){ /* usuário cancelou */ }
+}
+function telDigits(tel){
+  let d = String(tel||"").replace(/\D/g,"");
+  if(d.length===10 || d.length===11) d = "55"+d;
+  return d;
+}
+function waHref(tel, msg){
+  const d = telDigits(tel);
+  if(!d) return null;
+  return "https://wa.me/"+d+(msg ? "?text="+encodeURIComponent(msg) : "");
+}
+
 function salvarVenda(){
   const cliente = document.getElementById("f-cliente").value.trim();
   const peca = document.getElementById("f-peca").value.trim();
@@ -500,8 +571,10 @@ function salvarVenda(){
   const data = document.getElementById("f-data").value || hojeISO();
   const pagamento = segVal("seg-pag") || "pix";
   const canal = segVal("seg-canal") || "grupo";
+  const tel = document.getElementById("f-tel").value.trim();
 
   if(!peca || venda <= 0){ toast("Preencha a peça e o valor"); return; }
+  if(pagamento==="cartao" && !cliente){ toast("Venda parcelada precisa do nome da cliente"); return; }
 
   const nparc = pagamento==="cartao" ? parseInt(segVal("seg-nparc")||"3",10) : null;
 
@@ -510,7 +583,7 @@ function salvarVenda(){
     const mudouPag = v.pagamento !== pagamento;
     const mudouValor = v.venda !== venda;
     const mudouN = v.nparc !== nparc;
-    Object.assign(v,{cliente,peca,venda,custo,data,pagamento,canal,nparc});
+    Object.assign(v,{cliente,peca,venda,custo,data,pagamento,canal,nparc,tel});
     v.status = parseInt(document.getElementById("f-status").value,10);
     if(pagamento === "cartao"){
       if(mudouPag || mudouValor || mudouN || !v.parcelas) v.parcelas = gerarParcelas(venda,data,nparc);
@@ -520,7 +593,7 @@ function salvarVenda(){
   } else {
     vendas.unshift({
       id: Date.now().toString(36)+Math.random().toString(36).slice(2,6),
-      cliente, peca, venda, custo, data, pagamento, canal, nparc,
+      cliente, peca, venda, custo, data, pagamento, canal, nparc, tel,
       status: 0,
       parcelas: pagamento==="cartao" ? gerarParcelas(venda,data,nparc) : null
     });
@@ -596,11 +669,13 @@ function cardVenda(v){
   const stBtn = done
     ? '<button class="status-btn done">Entregue ✓</button>'
     : '<button class="status-btn" onclick="avancarStatus(\''+v.id+'\')">'+STATUS[v.status]+' →</button>';
+  const wa = waHref(v.tel);
+  const waBtn = wa ? '<a class="wa-btn" href="'+wa+'" target="_blank" rel="noopener">WhatsApp</a>' : '';
   return '<div class="card">'
     +'<div class="top"><div><div class="peca">'+esc(v.peca)+'</div>'
     +'<div class="cliente">'+esc(v.cliente||"—")+' · '+fmtData(v.data)+'</div></div>'
     +'<div class="valor num">'+brl(v.venda)+'</div></div>'
-    +'<div class="meta">'+stBtn
+    +'<div class="meta">'+stBtn+waBtn
     +'<span class="tag pay">'+pagLabel(v)+'</span>'
     +'<span class="tag">'+CANAL_LABEL[v.canal]+'</span>'
     +'<button class="edit-link" onclick="abrirEdicao(\''+v.id+'\')">editar</button></div>'
@@ -630,11 +705,21 @@ function renderReceber(){
   }
   box.innerHTML = pend.map(x=>{
     const late = x.p.venc < hoje;
+    const primeiroNome = (x.v.cliente||"").trim().split(" ")[0];
+    const msg = "Oi "+(primeiroNome||"tudo bem?")+"! Passando pra lembrar da parcela "
+      +(x.i+1)+"/"+x.v.parcelas.length+" de "+brl(x.p.valor)
+      +(late ? ", que venceu dia " : ", que vence dia ")+fmtData(x.p.venc)
+      +". Qualquer coisa me chama! 💛";
+    const wa = waHref(x.v.tel, msg);
+    const cobrar = wa ? '<a class="cobrar" href="'+wa+'" target="_blank" rel="noopener">Cobrar</a>' : '';
     return '<div class="parc">'
       +'<div><div class="who">'+esc(x.v.cliente||x.v.peca)+' · '+(x.i+1)+'/'+x.v.parcelas.length+'</div>'
       +'<div class="venc'+(late?" late":"")+'">vence '+fmtData(x.p.venc)+(late?" · vencida":"")+'</div></div>'
       +'<div class="v num">'+brl(x.p.valor)+'</div>'
+      +'<div class="parc-actions">'
       +'<button onclick="pagarParcela(\''+x.v.id+'\','+x.i+')">Recebi</button>'
+      +cobrar
+      +'</div>'
       +'</div>';
   }).join("");
 }
@@ -710,6 +795,9 @@ function importarBackup(input){
 
 // ================= init =================
 carregar();
+if("contacts" in navigator && "select" in navigator.contacts){
+  document.getElementById("btn-contato").style.display = "block";
+}
 render();
 </script>
 </body>
