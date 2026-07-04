@@ -294,10 +294,22 @@ input:focus,select:focus{border-color:var(--gold-soft)}
 
     <label>Pagamento</label>
     <div class="seg" id="seg-pag">
-      <button data-v="pix" onclick="segSel(this,'pag')">Pix</button>
-      <button data-v="3x" onclick="segSel(this,'pag')">3x cartão</button>
-      <button data-v="avista" onclick="segSel(this,'pag')">Cartão à vista</button>
-      <button data-v="dinheiro" onclick="segSel(this,'pag')">Dinheiro</button>
+      <button data-v="pix" onclick="segSel(this,'pag');toggleParcelas()">Pix</button>
+      <button data-v="cartao" onclick="segSel(this,'pag');toggleParcelas()">Cartão parcelado</button>
+      <button data-v="avista" onclick="segSel(this,'pag');toggleParcelas()">Cartão à vista</button>
+      <button data-v="dinheiro" onclick="segSel(this,'pag');toggleParcelas()">Dinheiro</button>
+    </div>
+
+    <div id="parcelas-wrap" style="display:none">
+      <label>Quantidade de parcelas</label>
+      <div class="seg" id="seg-nparc">
+        <button data-v="2" onclick="segSel(this,'nparc')">2x</button>
+        <button data-v="3" onclick="segSel(this,'nparc')">3x</button>
+        <button data-v="4" onclick="segSel(this,'nparc')">4x</button>
+        <button data-v="5" onclick="segSel(this,'nparc')">5x</button>
+        <button data-v="6" onclick="segSel(this,'nparc')">6x</button>
+      </div>
+      <div class="hint">Cada parcela vira uma cobrança na aba Receber, com vencimento a cada 30 dias.</div>
     </div>
 
     <label>Canal</label>
@@ -338,7 +350,11 @@ input:focus,select:focus{border-color:var(--gold-soft)}
 const KEY = "semijoias_vendas_v1";
 const KEY_BK = "semijoias_backup_ts";
 const STATUS = ["Encomendado","Pago","Pedido ao fornecedor","Recebido","Entregue"];
-const PAG_LABEL = {pix:"Pix","3x":"3x cartão",avista:"Cartão à vista",dinheiro:"Dinheiro"};
+const PAG_LABEL = {pix:"Pix",avista:"Cartão à vista",dinheiro:"Dinheiro"};
+function pagLabel(v){
+  if(v.pagamento==="cartao") return (v.nparc||3)+"x cartão";
+  return PAG_LABEL[v.pagamento] || v.pagamento;
+}
 const CANAL_LABEL = {grupo:"Grupo VIP",direto:"Direto",outro:"Outro"};
 
 let vendas = [];
@@ -348,6 +364,13 @@ let mesAtual = new Date();
 function carregar(){
   try{ vendas = JSON.parse(localStorage.getItem(KEY)) || []; }
   catch(e){ vendas = []; }
+  // migração: vendas antigas salvas como "3x"
+  let mudou = false;
+  vendas.forEach(v=>{
+    if(v.pagamento==="3x"){ v.pagamento="cartao"; v.nparc=3; mudou=true; }
+    if(v.pagamento==="cartao" && !v.nparc){ v.nparc = (v.parcelas&&v.parcelas.length)||3; mudou=true; }
+  });
+  if(mudou) persistir();
 }
 function persistir(){
   localStorage.setItem(KEY, JSON.stringify(vendas));
@@ -399,8 +422,9 @@ function abrirNova(){
   document.getElementById("f-status-wrap").style.display = "none";
   ["f-cliente","f-peca","f-venda","f-custo"].forEach(id=>document.getElementById(id).value="");
   document.getElementById("f-data").value = hojeISO();
-  segReset("seg-pag"); segReset("seg-canal");
-  segSetVal("seg-pag","pix"); segSetVal("seg-canal","grupo");
+  segReset("seg-pag"); segReset("seg-canal"); segReset("seg-nparc");
+  segSetVal("seg-pag","pix"); segSetVal("seg-canal","grupo"); segSetVal("seg-nparc","3");
+  toggleParcelas();
   previewLucro();
   document.getElementById("overlay").classList.add("on");
 }
@@ -417,8 +441,10 @@ function abrirEdicao(id){
   document.getElementById("f-custo").value = String(v.custo).replace(".",",");
   document.getElementById("f-data").value = v.data;
   document.getElementById("f-status").value = String(v.status);
-  segReset("seg-pag"); segReset("seg-canal");
+  segReset("seg-pag"); segReset("seg-canal"); segReset("seg-nparc");
   segSetVal("seg-pag", v.pagamento); segSetVal("seg-canal", v.canal);
+  segSetVal("seg-nparc", String(v.nparc||3));
+  toggleParcelas();
   previewLucro();
   document.getElementById("overlay").classList.add("on");
 }
@@ -441,21 +467,29 @@ function segVal(id){
   return b ? b.dataset.v : null;
 }
 function previewLucro(){
-  const l = parseValor(document.getElementById("f-venda").value) - parseValor(document.getElementById("f-custo").value);
+  const vv = parseValor(document.getElementById("f-venda").value);
+  const l = vv - parseValor(document.getElementById("f-custo").value);
+  const pct = vv > 0 ? Math.round((l/vv)*100) : 0;
   const el = document.getElementById("f-lucro-preview");
-  el.textContent = brl(l);
+  el.textContent = brl(l) + (vv>0 ? " · "+pct+"%" : "");
   el.style.color = l >= 0 ? "var(--green)" : "var(--red)";
 }
 
 // ================= salvar / excluir =================
-function gerarParcelas(venda, data){
-  const p = Math.round((venda/3)*100)/100;
-  const ultima = Math.round((venda - 2*p)*100)/100;
-  return [1,2,3].map(i=>({
-    venc: addMeses(data, i),
-    valor: i===3 ? ultima : p,
-    pago: false
-  }));
+function gerarParcelas(venda, data, n){
+  n = n || 3;
+  const p = Math.round((venda/n)*100)/100;
+  const ultima = Math.round((venda - (n-1)*p)*100)/100;
+  const out = [];
+  for(let i=1;i<=n;i++){
+    out.push({venc: addMeses(data,i), valor: i===n ? ultima : p, pago:false});
+  }
+  return out;
+}
+
+function toggleParcelas(){
+  const on = segVal("seg-pag")==="cartao";
+  document.getElementById("parcelas-wrap").style.display = on ? "block" : "none";
 }
 
 function salvarVenda(){
@@ -469,23 +503,26 @@ function salvarVenda(){
 
   if(!peca || venda <= 0){ toast("Preencha a peça e o valor"); return; }
 
+  const nparc = pagamento==="cartao" ? parseInt(segVal("seg-nparc")||"3",10) : null;
+
   if(editandoId){
     const v = vendas.find(x=>x.id===editandoId);
     const mudouPag = v.pagamento !== pagamento;
     const mudouValor = v.venda !== venda;
-    Object.assign(v,{cliente,peca,venda,custo,data,pagamento,canal});
+    const mudouN = v.nparc !== nparc;
+    Object.assign(v,{cliente,peca,venda,custo,data,pagamento,canal,nparc});
     v.status = parseInt(document.getElementById("f-status").value,10);
-    if(pagamento === "3x"){
-      if(mudouPag || mudouValor || !v.parcelas) v.parcelas = gerarParcelas(venda,data);
+    if(pagamento === "cartao"){
+      if(mudouPag || mudouValor || mudouN || !v.parcelas) v.parcelas = gerarParcelas(venda,data,nparc);
     } else {
       v.parcelas = null;
     }
   } else {
     vendas.unshift({
       id: Date.now().toString(36)+Math.random().toString(36).slice(2,6),
-      cliente, peca, venda, custo, data, pagamento, canal,
+      cliente, peca, venda, custo, data, pagamento, canal, nparc,
       status: 0,
-      parcelas: pagamento==="3x" ? gerarParcelas(venda,data) : null
+      parcelas: pagamento==="cartao" ? gerarParcelas(venda,data,nparc) : null
     });
   }
   persistir();
@@ -564,10 +601,10 @@ function cardVenda(v){
     +'<div class="cliente">'+esc(v.cliente||"—")+' · '+fmtData(v.data)+'</div></div>'
     +'<div class="valor num">'+brl(v.venda)+'</div></div>'
     +'<div class="meta">'+stBtn
-    +'<span class="tag pay">'+PAG_LABEL[v.pagamento]+'</span>'
+    +'<span class="tag pay">'+pagLabel(v)+'</span>'
     +'<span class="tag">'+CANAL_LABEL[v.canal]+'</span>'
     +'<button class="edit-link" onclick="abrirEdicao(\''+v.id+'\')">editar</button></div>'
-    +'<div class="lucro">lucro <b class="num">'+brl(lucro)+'</b></div>'
+    +'<div class="lucro">lucro <b class="num">'+brl(lucro)+(v.venda>0?' · '+Math.round((lucro/v.venda)*100)+'%':'')+'</b></div>'
     +'</div>';
 }
 
@@ -588,13 +625,13 @@ function renderReceber(){
   document.getElementById("rec-vencidas").textContent = brl(vencidas);
 
   if(pend.length===0){
-    box.innerHTML = '<div class="empty"><span class="serif">Nada a receber</span>Parcelas de vendas em 3x aparecem aqui, com vencimento em 30, 60 e 90 dias.</div>';
+    box.innerHTML = '<div class="empty"><span class="serif">Nada a receber</span>Parcelas de vendas no cartão (2x a 6x) aparecem aqui, com vencimento a cada 30 dias.</div>';
     return;
   }
   box.innerHTML = pend.map(x=>{
     const late = x.p.venc < hoje;
     return '<div class="parc">'
-      +'<div><div class="who">'+esc(x.v.cliente||x.v.peca)+' · '+(x.i+1)+'/3</div>'
+      +'<div><div class="who">'+esc(x.v.cliente||x.v.peca)+' · '+(x.i+1)+'/'+x.v.parcelas.length+'</div>'
       +'<div class="venc'+(late?" late":"")+'">vence '+fmtData(x.p.venc)+(late?" · vencida":"")+'</div></div>'
       +'<div class="v num">'+brl(x.p.valor)+'</div>'
       +'<button onclick="pagarParcela(\''+x.v.id+'\','+x.i+')">Recebi</button>'
