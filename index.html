@@ -4,7 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1c1216">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" id="manifest-link">
+<link rel="icon" id="fav-link">
 <title>Controle · Semi Joias</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -254,8 +258,18 @@ input:focus,select:focus{border-color:var(--gold-soft)}
 
   <!-- ============ PEÇAS ============ -->
   <section id="page-pecas" class="page">
-    <button class="btn primary" style="width:100%;margin-bottom:14px" onclick="abrirNovaPeca()">+ Cadastrar peça</button>
-    <div id="lista-pecas"></div>
+    <div class="seg" style="margin-bottom:14px" id="seg-pecas-view">
+      <button data-v="pecas" class="on" onclick="segSel(this);pecasView('pecas')">Peças</button>
+      <button data-v="forn" onclick="segSel(this);pecasView('forn')">Fornecedores</button>
+    </div>
+    <div id="view-pecas">
+      <button class="btn primary" style="width:100%;margin-bottom:14px" onclick="abrirNovaPeca()">+ Cadastrar peça</button>
+      <div id="lista-pecas"></div>
+    </div>
+    <div id="view-forn" style="display:none">
+      <button class="btn primary" style="width:100%;margin-bottom:14px" onclick="abrirNovoForn()">+ Cadastrar fornecedor</button>
+      <div id="lista-forn"></div>
+    </div>
   </section>
 
   <!-- ============ RECEBER ============ -->
@@ -400,6 +414,10 @@ input:focus,select:focus{border-color:var(--gold-soft)}
     <label>Tipo</label>
     <select id="p-tipo"><option value="">Escolher tipo</option></select>
 
+    <label>Fornecedor</label>
+    <select id="p-forn"><option value="">Sem fornecedor</option></select>
+    <div class="hint">Cadastre fornecedores na aba Peças → Fornecedores. A peça guarda de quem você compra.</div>
+
     <div class="row">
       <div>
         <label>Custo padrão</label>
@@ -420,6 +438,26 @@ input:focus,select:focus{border-color:var(--gold-soft)}
   </div>
 </div>
 
+<!-- ============ MODAL FORNECEDOR ============ -->
+<div class="overlay" id="overlay-forn" onclick="if(event.target===this)fecharModalForn()">
+  <div class="sheet">
+    <h2 id="modal-forn-titulo">Cadastrar fornecedor</h2>
+
+    <label>Nome</label>
+    <input id="fo-nome" type="text" placeholder="Nome do fornecedor" autocomplete="off">
+
+    <label>WhatsApp</label>
+    <input id="fo-tel" type="tel" inputmode="tel" placeholder="DDD + número" autocomplete="off">
+    <div class="hint">Com o número, o fornecedor ganha botão de conversa — útil na hora de fazer o pedido.</div>
+
+    <div class="actions">
+      <button class="btn danger" id="btn-excluir-forn" style="display:none" onclick="excluirForn()">Excluir</button>
+      <button class="btn" onclick="fecharModalForn()">Cancelar</button>
+      <button class="btn primary" onclick="salvarForn()">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -428,6 +466,7 @@ input:focus,select:focus{border-color:var(--gold-soft)}
 // ================= dados =================
 const KEY = "semijoias_vendas_v1";
 const KEY_P = "semijoias_pecas_v1";
+const KEY_F = "semijoias_fornecedores_v1";
 const KEY_BK = "semijoias_backup_ts";
 const STATUS = ["Encomendado","Pago","Pedido ao fornecedor","Recebido","Entregue"];
 const PAG_LABEL = {pix:"Pix",avista:"Cartão à vista",dinheiro:"Dinheiro"};
@@ -440,7 +479,9 @@ const CANAL_LABEL = {grupo:"Grupo VIP",direto:"Direto",outro:"Outro"};
 let vendas = [];
 const TIPOS = ["Colar","Anel","Brinco","Conjunto","Pulseira","Bracelete","Pingente","Piercing fake"];
 let pecas = [];
+let fornecedores = [];
 let editandoPecaId = null;
+let editandoFornId = null;
 let editandoId = null;
 let mesAtual = new Date();
 
@@ -449,6 +490,8 @@ function carregar(){
   catch(e){ vendas = []; }
   try{ pecas = JSON.parse(localStorage.getItem(KEY_P)) || []; }
   catch(e){ pecas = []; }
+  try{ fornecedores = JSON.parse(localStorage.getItem(KEY_F)) || []; }
+  catch(e){ fornecedores = []; }
   // migração: vendas antigas salvas como "3x" e formato de item único
   let mudou = false;
   vendas.forEach(v=>{
@@ -463,6 +506,9 @@ function persistir(){
 }
 function persistirPecas(){
   localStorage.setItem(KEY_P, JSON.stringify(pecas));
+}
+function persistirForn(){
+  localStorage.setItem(KEY_F, JSON.stringify(fornecedores));
 }
 
 // ================= util =================
@@ -811,6 +857,7 @@ function pagarParcela(idVenda, idx){
 function render(){
   renderVendas();
   renderPecas();
+  renderForn();
   renderReceber();
   renderResumo();
   const ts = localStorage.getItem(KEY_BK);
@@ -941,6 +988,85 @@ function renderResumo(){
   document.getElementById("res-receber").textContent = brl(receber);
 }
 
+// ================= fornecedores =================
+function pecasView(v){
+  document.getElementById("view-pecas").style.display = v==="pecas" ? "block" : "none";
+  document.getElementById("view-forn").style.display = v==="forn" ? "block" : "none";
+}
+function fornNome(id){
+  const f = fornecedores.find(x=>x.id===id);
+  return f ? f.nome : null;
+}
+function renderForn(){
+  const box = document.getElementById("lista-forn");
+  if(fornecedores.length===0){
+    box.innerHTML = '<div class="empty"><span class="serif">Nenhum fornecedor</span>Cadastre de quem você compra. Cada peça pode apontar pro fornecedor dela.</div>';
+    return;
+  }
+  box.innerHTML = fornecedores.map(f=>{
+    const qtd = pecas.filter(p=>p.fornecedorId===f.id).length;
+    const wa = waHref(f.tel);
+    const waBtn = wa ? '<a class="wa-btn" href="'+wa+'" target="_blank" rel="noopener">WhatsApp</a>' : '';
+    return '<div class="parc">'
+      +'<div style="flex:1;min-width:0"><div class="who">'+esc(f.nome)+'</div>'
+      +'<div class="venc">'+qtd+' peça'+(qtd===1?'':'s')+' cadastrada'+(qtd===1?'':'s')+'</div></div>'
+      + waBtn
+      +'<button class="edit-link" onclick="abrirEdicaoForn(\''+f.id+'\')">editar</button>'
+      +'</div>';
+  }).join("");
+}
+function abrirNovoForn(){
+  editandoFornId = null;
+  document.getElementById("modal-forn-titulo").textContent = "Cadastrar fornecedor";
+  document.getElementById("btn-excluir-forn").style.display = "none";
+  document.getElementById("fo-nome").value = "";
+  document.getElementById("fo-tel").value = "";
+  document.getElementById("overlay-forn").classList.add("on");
+}
+function abrirEdicaoForn(id){
+  const f = fornecedores.find(x=>x.id===id);
+  if(!f) return;
+  editandoFornId = id;
+  document.getElementById("modal-forn-titulo").textContent = "Editar fornecedor";
+  document.getElementById("btn-excluir-forn").style.display = "block";
+  document.getElementById("fo-nome").value = f.nome;
+  document.getElementById("fo-tel").value = f.tel||"";
+  document.getElementById("overlay-forn").classList.add("on");
+}
+function fecharModalForn(){
+  document.getElementById("overlay-forn").classList.remove("on");
+}
+function salvarForn(){
+  const nome = document.getElementById("fo-nome").value.trim();
+  if(!nome){ toast("Dê um nome pro fornecedor"); return; }
+  const tel = document.getElementById("fo-tel").value.trim();
+  if(editandoFornId){
+    const f = fornecedores.find(x=>x.id===editandoFornId);
+    if(f) Object.assign(f,{nome,tel});
+  } else {
+    fornecedores.unshift({id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, tel});
+  }
+  persistirForn();
+  fecharModalForn();
+  renderForn();
+  toast("Fornecedor salvo");
+}
+function excluirForn(){
+  if(!editandoFornId) return;
+  if(!confirm("Excluir este fornecedor? As peças dele ficam sem fornecedor.")) return;
+  fornecedores = fornecedores.filter(x=>x.id!==editandoFornId);
+  pecas.forEach(p=>{ if(p.fornecedorId===editandoFornId) p.fornecedorId = null; });
+  persistirForn(); persistirPecas();
+  fecharModalForn();
+  renderForn(); renderPecas();
+  toast("Fornecedor excluído");
+}
+function montarFornSelect(){
+  const sel = document.getElementById("p-forn");
+  sel.innerHTML = '<option value="">Sem fornecedor</option>'
+    + fornecedores.map(f=>'<option value="'+f.id+'">'+esc(f.nome)+'</option>').join("");
+}
+
 // ================= peças (aba) =================
 function renderPecas(){
   const box = document.getElementById("lista-pecas");
@@ -950,9 +1076,10 @@ function renderPecas(){
   }
   box.innerHTML = pecas.map(p=>{
     const est = p.estoque||0;
+    const fn = fornNome(p.fornecedorId);
     return '<div class="parc">'
       +'<div style="flex:1;min-width:0"><div class="who">'+esc(p.nome)+'</div>'
-      +'<div class="venc">'+(p.tipo||"sem tipo")+(p.custo?' · custo '+brl(p.custo):'')+'</div></div>'
+      +'<div class="venc">'+(p.tipo||"sem tipo")+(fn?' · '+esc(fn):'')+(p.custo?' · custo '+brl(p.custo):'')+'</div></div>'
       +'<div class="est-ctrl">'
       +'<button onclick="ajustarEstoqueId(\''+p.id+'\',-1)">−</button>'
       +'<span class="n num'+(est===0?' zero':'')+'">'+est+'</span>'
@@ -970,7 +1097,9 @@ function abrirNovaPeca(){
   document.getElementById("p-custo").value = "";
   document.getElementById("p-estoque").value = "";
   montarTiposSelect();
+  montarFornSelect();
   document.getElementById("p-tipo").value = "";
+  document.getElementById("p-forn").value = "";
   document.getElementById("overlay-peca").classList.add("on");
 }
 function abrirEdicaoPeca(id){
@@ -980,8 +1109,10 @@ function abrirEdicaoPeca(id){
   document.getElementById("modal-peca-titulo").textContent = "Editar peça";
   document.getElementById("btn-excluir-peca").style.display = "block";
   montarTiposSelect();
+  montarFornSelect();
   document.getElementById("p-nome").value = p.nome;
   document.getElementById("p-tipo").value = p.tipo||"";
+  document.getElementById("p-forn").value = p.fornecedorId||"";
   document.getElementById("p-custo").value = p.custo ? numToStr(p.custo) : "";
   document.getElementById("p-estoque").value = p.estoque||0;
   document.getElementById("overlay-peca").classList.add("on");
@@ -1003,14 +1134,15 @@ function salvarPeca(){
   const nome = document.getElementById("p-nome").value.trim();
   if(!nome){ toast("Dê um nome pra peça"); return; }
   const tipo = document.getElementById("p-tipo").value || null;
+  const fornecedorId = document.getElementById("p-forn").value || null;
   const custo = parseValor(document.getElementById("p-custo").value);
   const estoque = Math.max(0, parseInt(document.getElementById("p-estoque").value,10)||0);
   if(editandoPecaId){
     const p = pecas.find(x=>x.id===editandoPecaId);
-    if(p) Object.assign(p,{nome,tipo,custo,estoque});
+    if(p) Object.assign(p,{nome,tipo,custo,estoque,fornecedorId});
   } else {
     if(findPeca(nome)){ toast("Já existe peça com esse nome"); return; }
-    pecas.unshift({id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, tipo, custo, estoque});
+    pecas.unshift({id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, tipo, custo, estoque, fornecedorId});
   }
   persistirPecas();
   fecharModalPeca();
@@ -1029,7 +1161,7 @@ function excluirPeca(){
 
 // ================= backup =================
 function exportarBackup(){
-  const blob = new Blob([JSON.stringify({exportado:new Date().toISOString(),vendas,pecas},null,2)],{type:"application/json"});
+  const blob = new Blob([JSON.stringify({exportado:new Date().toISOString(),vendas,pecas,fornecedores},null,2)],{type:"application/json"});
   const url = URL.createObjectURL(blob);
   const aEl = document.createElement("a");
   aEl.href = url;
@@ -1055,7 +1187,8 @@ function importarBackup(input){
       if(!confirm("Importar "+lista.length+" vendas? Isso substitui os dados atuais.")) return;
       vendas = lista;
       if(Array.isArray(data.pecas)) pecas = data.pecas;
-      persistir(); persistirPecas();
+      if(Array.isArray(data.fornecedores)) fornecedores = data.fornecedores;
+      persistir(); persistirPecas(); persistirForn();
       carregar();
       render();
       toast("Backup importado");
@@ -1068,6 +1201,30 @@ function importarBackup(input){
 }
 
 // ================= init =================
+// manifest + ícone gerados em runtime: instala como app no Android/Chrome
+(function(){
+  const icone = "data:image/svg+xml," + encodeURIComponent(
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
+    +"<rect width='100' height='100' rx='22' fill='#1c1216'/>"
+    +"<path d='M35 28 L65 28 L82 45 L50 84 L18 45 Z' fill='none' stroke='#d9b06c' stroke-width='5' stroke-linejoin='round'/>"
+    +"<path d='M35 28 L50 45 L65 28 M18 45 L82 45 M50 45 L50 82' fill='none' stroke='#d9b06c' stroke-width='3' stroke-linejoin='round'/>"
+    +"</svg>"
+  );
+  document.getElementById("fav-link").href = icone;
+  const manifest = {
+    name: "Controle Semi Joias",
+    short_name: "Semi Joias",
+    start_url: ".",
+    scope: ".",
+    display: "standalone",
+    background_color: "#1c1216",
+    theme_color: "#1c1216",
+    icons: [{src: icone, sizes: "any", type: "image/svg+xml", purpose: "any"}]
+  };
+  const blob = new Blob([JSON.stringify(manifest)], {type:"application/json"});
+  document.getElementById("manifest-link").href = URL.createObjectURL(blob);
+})();
+
 carregar();
 if("contacts" in navigator && "select" in navigator.contacts){
   document.getElementById("btn-contato").style.display = "block";
