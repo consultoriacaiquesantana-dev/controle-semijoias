@@ -233,13 +233,6 @@ input:focus,select:focus{border-color:var(--gold-soft)}
 .add-item{width:100%;border-style:dashed;color:var(--gold);border-color:var(--gold-soft);background:none;margin-top:2px}
 .itens-lista{margin-top:8px;display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--ivory-dim)}
 .itens-lista div{display:flex;justify-content:space-between;gap:10px}
-.est-ctrl{display:flex;align-items:center;gap:12px}
-.est-ctrl button{
-  width:34px;height:34px;border-radius:10px;border:1px solid var(--line);
-  background:var(--surface2);color:var(--gold);font-size:17px;cursor:pointer;
-}
-.est-ctrl .n{min-width:20px;text-align:center;font-weight:500;font-variant-numeric:tabular-nums}
-.est-ctrl .n.zero{color:var(--ivory-dim)}
 </style>
 </head>
 <body>
@@ -345,7 +338,8 @@ input:focus,select:focus{border-color:var(--gold-soft)}
     <div id="itens-box"></div>
     <button type="button" class="btn add-item" onclick="addItemRow()">+ Adicionar outra peça</button>
     <datalist id="dl-pecas"></datalist>
-    <div class="hint">Custo = fornecedor + taxa de cartão + frete, por peça. Peça já cadastrada preenche tipo e custo sozinha; se ela tiver estoque, a venda baixa 1 automaticamente.</div>
+    <datalist id="dl-forn"></datalist>
+    <div class="hint">Custo = fornecedor + taxa de cartão + frete, por peça. Peça já cadastrada preenche tipo, custo e fornecedor sozinha. Peça e fornecedor novos são cadastrados automaticamente ao salvar a venda.</div>
 
     <div class="lucro-preview"><span>Lucro total da venda</span><b id="f-lucro-preview">R$ 0,00</b></div>
 
@@ -355,6 +349,7 @@ input:focus,select:focus{border-color:var(--gold-soft)}
       <button data-v="cartao" onclick="segSel(this,'pag');toggleParcelas()">Cartão parcelado</button>
       <button data-v="avista" onclick="segSel(this,'pag');toggleParcelas()">Cartão à vista</button>
       <button data-v="dinheiro" onclick="segSel(this,'pag');toggleParcelas()">Dinheiro</button>
+      <button data-v="prazo" onclick="segSel(this,'pag');toggleParcelas()">A prazo</button>
     </div>
 
     <div id="parcelas-wrap" style="display:none">
@@ -366,12 +361,24 @@ input:focus,select:focus{border-color:var(--gold-soft)}
         <button data-v="5" onclick="segSel(this,'nparc')">5x</button>
         <button data-v="6" onclick="segSel(this,'nparc')">6x</button>
       </div>
-      <label>Como você recebe</label>
-      <div class="seg" id="seg-receb">
-        <button data-v="antecipado" onclick="segSel(this,'receb')">Cai na hora</button>
-        <button data-v="parcelado" onclick="segSel(this,'receb')">A cada 30 dias</button>
+      <div id="receb-wrap">
+        <label>Como você recebe</label>
+        <div class="seg" id="seg-receb">
+          <button data-v="antecipado" onclick="segSel(this,'receb')">Cai na hora</button>
+          <button data-v="parcelado" onclick="segSel(this,'receb')">A cada 30 dias</button>
+        </div>
+        <div class="hint">Cai na hora (antecipação automática): a maquininha paga tudo de uma vez, com taxa maior — não gera nada na aba Receber; lembre de incluir a taxa no custo. A cada 30 dias: cada parcela vira uma cobrança na aba Receber.</div>
       </div>
-      <div class="hint">Cai na hora (antecipação automática): a maquininha paga tudo de uma vez, com taxa maior — não gera nada na aba Receber; lembre de incluir a taxa no custo. A cada 30 dias: cada parcela vira uma cobrança na aba Receber.</div>
+      <div id="prazo-wrap" style="display:none">
+        <label>Frequência</label>
+        <div class="seg" id="seg-freq">
+          <button data-v="semanal" onclick="segSel(this,'freq')">Semanal</button>
+          <button data-v="mensal" onclick="segSel(this,'freq')">Mensal</button>
+        </div>
+        <label>Data do primeiro pagamento</label>
+        <input id="f-inicio" type="date">
+        <div class="hint">A partir dessa data as demais parcelas são calculadas (de 7 em 7 dias no semanal, de 30 em 30 no mensal) e vão pra aba Receber com o botão Cobrar.</div>
+      </div>
     </div>
 
     <label>Canal</label>
@@ -418,17 +425,8 @@ input:focus,select:focus{border-color:var(--gold-soft)}
     <select id="p-forn"><option value="">Sem fornecedor</option></select>
     <div class="hint">Cadastre fornecedores na aba Peças → Fornecedores. A peça guarda de quem você compra.</div>
 
-    <div class="row">
-      <div>
-        <label>Custo padrão</label>
-        <input id="p-custo" type="text" inputmode="decimal" placeholder="0,00" oninput="moeda(this)">
-      </div>
-      <div>
-        <label>Estoque</label>
-        <input id="p-estoque" type="number" inputmode="numeric" placeholder="0" min="0">
-      </div>
-    </div>
-    <div class="hint">Estoque zero = peça de encomenda (normal no seu fluxo). Só coloque estoque nas sobras e peças da maleta.</div>
+    <label>Custo padrão</label>
+    <input id="p-custo" type="text" inputmode="decimal" placeholder="0,00" oninput="moeda(this)">
 
     <div class="actions">
       <button class="btn danger" id="btn-excluir-peca" style="display:none" onclick="excluirPeca()">Excluir</button>
@@ -472,6 +470,7 @@ const STATUS = ["Encomendado","Pago","Pedido ao fornecedor","Recebido","Entregue
 const PAG_LABEL = {pix:"Pix",avista:"Cartão à vista",dinheiro:"Dinheiro"};
 function pagLabel(v){
   if(v.pagamento==="cartao") return (v.nparc||3)+"x cartão";
+  if(v.pagamento==="prazo") return (v.nparc||3)+"x a prazo"+(v.freq==="mensal"?" (mensal)":" (semanal)");
   return PAG_LABEL[v.pagamento] || v.pagamento;
 }
 const CANAL_LABEL = {grupo:"Grupo VIP",direto:"Direto",outro:"Outro"};
@@ -551,6 +550,11 @@ function addMeses(iso, n){
   const dt = new Date(a, m-1+n, d);
   return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");
 }
+function addDias(iso, n){
+  const [a,m,d] = iso.split("-").map(Number);
+  const dt = new Date(a, m-1, d+n);
+  return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");
+}
 function toast(msg){
   const t = document.getElementById("toast");
   t.textContent = msg; t.classList.add("on");
@@ -577,9 +581,10 @@ function abrirNova(){
   addItemRow();
   document.getElementById("f-data").value = hojeISO();
   preencherDatalist();
-  segReset("seg-pag"); segReset("seg-canal"); segReset("seg-nparc"); segReset("seg-receb");
+  segReset("seg-pag"); segReset("seg-canal"); segReset("seg-nparc"); segReset("seg-receb"); segReset("seg-freq");
   segSetVal("seg-pag","pix"); segSetVal("seg-canal","grupo"); segSetVal("seg-nparc","3");
-  segSetVal("seg-receb","antecipado");
+  segSetVal("seg-receb","antecipado"); segSetVal("seg-freq","semanal");
+  document.getElementById("f-inicio").value = "";
   toggleParcelas();
   previewLucro();
   document.getElementById("overlay").classList.add("on");
@@ -599,10 +604,12 @@ function abrirEdicao(id){
   its.forEach(it=>addItemRow(it));
   document.getElementById("f-data").value = v.data;
   document.getElementById("f-status").value = String(v.status);
-  segReset("seg-pag"); segReset("seg-canal"); segReset("seg-nparc"); segReset("seg-receb");
+  segReset("seg-pag"); segReset("seg-canal"); segReset("seg-nparc"); segReset("seg-receb"); segReset("seg-freq");
   segSetVal("seg-pag", v.pagamento); segSetVal("seg-canal", v.canal);
   segSetVal("seg-nparc", String(v.nparc||3));
   segSetVal("seg-receb", v.receb || (v.parcelas ? "parcelado" : "antecipado"));
+  segSetVal("seg-freq", v.freq || "semanal");
+  document.getElementById("f-inicio").value = v.inicioPag || "";
   toggleParcelas();
   previewLucro();
   document.getElementById("overlay").classList.add("on");
@@ -649,6 +656,7 @@ function addItemRow(d){
     +'<select class="it-tipo"><option value="">Tipo da peça</option>'
     + TIPOS.map(t=>'<option>'+t+'</option>').join("")
     +'</select>'
+    +'<input class="it-forn" type="text" placeholder="Fornecedor" list="dl-forn" autocomplete="off" style="margin-top:8px">'
     +'<div class="row">'
     +'<input class="it-venda" type="text" inputmode="decimal" placeholder="Venda 0,00" oninput="moeda(this);previewLucro()">'
     +'<input class="it-custo" type="text" inputmode="decimal" placeholder="Custo 0,00" oninput="moeda(this);previewLucro()">'
@@ -656,6 +664,12 @@ function addItemRow(d){
   box.appendChild(div);
   if(d.peca) div.querySelector(".it-nome").value = d.peca;
   if(d.tipo) div.querySelector(".it-tipo").value = d.tipo;
+  if(d.forn) div.querySelector(".it-forn").value = d.forn;
+  else if(d.peca){
+    const p0 = findPeca(d.peca);
+    const fn0 = p0 ? fornNome(p0.fornecedorId) : null;
+    if(fn0) div.querySelector(".it-forn").value = fn0;
+  }
   if(d.venda != null && d.venda !== 0) div.querySelector(".it-venda").value = numToStr(d.venda);
   if(d.custo != null && d.custo !== 0) div.querySelector(".it-custo").value = numToStr(d.custo);
 }
@@ -669,6 +683,7 @@ function lerItens(){
   return [...document.querySelectorAll("#itens-box .item-row")].map(r=>({
     peca: r.querySelector(".it-nome").value.trim(),
     tipo: r.querySelector(".it-tipo").value || null,
+    forn: r.querySelector(".it-forn").value.trim() || null,
     venda: parseValor(r.querySelector(".it-venda").value),
     custo: parseValor(r.querySelector(".it-custo").value)
   }));
@@ -681,8 +696,11 @@ function pecaAuto(inp){
   const row = inp.closest(".item-row");
   const tipoEl = row.querySelector(".it-tipo");
   const custoEl = row.querySelector(".it-custo");
+  const fornEl = row.querySelector(".it-forn");
   if(p.tipo && !tipoEl.value) tipoEl.value = p.tipo;
   if(p.custo && !custoEl.value){ custoEl.value = numToStr(p.custo); previewLucro(); }
+  const fn = fornNome(p.fornecedorId);
+  if(fn && !fornEl.value) fornEl.value = fn;
 }
 
 // ================= salvar / excluir =================
@@ -696,10 +714,24 @@ function gerarParcelas(venda, data, n){
   }
   return out;
 }
+function gerarParcelasPrazo(venda, n, freq, inicio){
+  n = n || 3;
+  const p = Math.round((venda/n)*100)/100;
+  const ultima = Math.round((venda - (n-1)*p)*100)/100;
+  const out = [];
+  for(let i=0;i<n;i++){
+    const venc = freq==="semanal" ? addDias(inicio, 7*i) : addMeses(inicio, i);
+    out.push({venc, valor: i===n-1 ? ultima : p, pago:false});
+  }
+  return out;
+}
 
 function toggleParcelas(){
-  const on = segVal("seg-pag")==="cartao";
-  document.getElementById("parcelas-wrap").style.display = on ? "block" : "none";
+  const pag = segVal("seg-pag");
+  const cartao = pag==="cartao", prazo = pag==="prazo";
+  document.getElementById("parcelas-wrap").style.display = (cartao||prazo) ? "block" : "none";
+  document.getElementById("receb-wrap").style.display = cartao ? "block" : "none";
+  document.getElementById("prazo-wrap").style.display = prazo ? "block" : "none";
 }
 
 // ================= clientes =================
@@ -719,6 +751,8 @@ function preencherDatalist(){
     clientesUnicos().map(c=>'<option value="'+esc(c.nome)+'">').join("");
   document.getElementById("dl-pecas").innerHTML =
     pecas.map(p=>'<option value="'+esc(p.nome)+'">').join("");
+  document.getElementById("dl-forn").innerHTML =
+    fornecedores.map(f=>'<option value="'+esc(f.nome)+'">').join("");
 }
 
 // ================= catálogo de peças =================
@@ -726,30 +760,32 @@ function findPeca(nome){
   const k = String(nome||"").trim().toLowerCase();
   return pecas.find(p=>p.nome.toLowerCase()===k) || null;
 }
-function registrarPeca(nome, tipo, custo){
+function registrarPeca(nome, tipo, custo, fornecedorId){
   nome = String(nome||"").trim();
   if(!nome) return null;
   let p = findPeca(nome);
   if(!p){
-    p = {id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, tipo:tipo||null, custo:custo||0, estoque:0};
+    p = {id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, tipo:tipo||null, custo:custo||0, fornecedorId:fornecedorId||null};
     pecas.unshift(p);
   } else {
     if(tipo) p.tipo = tipo;
     if(custo) p.custo = custo;
+    if(fornecedorId) p.fornecedorId = fornecedorId;
   }
   persistirPecas();
   return p;
 }
-function baixarEstoque(nome){
-  const p = findPeca(nome);
-  if(p && (p.estoque||0) > 0){ p.estoque--; persistirPecas(); }
-}
-function ajustarEstoqueId(id, delta){
-  const p = pecas.find(x=>x.id===id);
-  if(!p) return;
-  p.estoque = Math.max(0,(p.estoque||0)+delta);
-  persistirPecas();
-  renderPecas();
+function registrarForn(nome){
+  nome = String(nome||"").trim();
+  if(!nome) return null;
+  const k = nome.toLowerCase();
+  let f = fornecedores.find(x=>x.nome.toLowerCase()===k);
+  if(!f){
+    f = {id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, tel:""};
+    fornecedores.unshift(f);
+    persistirForn();
+  }
+  return f.id;
 }
 function autoTel(){
   const nome = document.getElementById("f-cliente").value.trim().toLowerCase();
@@ -790,36 +826,43 @@ function salvarVenda(){
   const tel = document.getElementById("f-tel").value.trim();
 
   if(itens.length===0 || itens.some(i=>!i.peca || i.venda<=0)){ toast("Preencha nome e valor de cada peça"); return; }
-  if(pagamento==="cartao" && !cliente){ toast("Venda parcelada precisa do nome da cliente"); return; }
+  if((pagamento==="cartao"||pagamento==="prazo") && !cliente){ toast("Venda parcelada precisa do nome da cliente"); return; }
 
-  const nparc = pagamento==="cartao" ? parseInt(segVal("seg-nparc")||"3",10) : null;
+  const usaParc = pagamento==="cartao" || pagamento==="prazo";
+  const nparc = usaParc ? parseInt(segVal("seg-nparc")||"3",10) : null;
   const receb = pagamento==="cartao" ? (segVal("seg-receb")||"antecipado") : null;
-  const geraParcelas = pagamento==="cartao" && receb==="parcelado";
+  const freq = pagamento==="prazo" ? (segVal("seg-freq")||"semanal") : null;
+  const inicioPag = pagamento==="prazo" ? document.getElementById("f-inicio").value : null;
+  if(pagamento==="prazo" && !inicioPag){ toast("Escolha a data do primeiro pagamento"); return; }
+  const geraParcelas = (pagamento==="cartao" && receb==="parcelado") || pagamento==="prazo";
+
+  function montarParcelas(){
+    return pagamento==="prazo"
+      ? gerarParcelasPrazo(venda, nparc, freq, inicioPag)
+      : gerarParcelas(venda, data, nparc);
+  }
 
   if(editandoId){
     const v = vendas.find(x=>x.id===editandoId);
-    const mudouPag = v.pagamento !== pagamento;
-    const mudouValor = v.venda !== venda;
-    const mudouN = v.nparc !== nparc;
-    const mudouReceb = v.receb !== receb;
-    Object.assign(v,{cliente,peca,venda,custo,data,pagamento,canal,nparc,tel,receb,itens});
+    const mudou = v.pagamento!==pagamento || v.venda!==venda || v.nparc!==nparc
+      || v.receb!==receb || v.freq!==freq || v.inicioPag!==inicioPag;
+    Object.assign(v,{cliente,peca,venda,custo,data,pagamento,canal,nparc,tel,receb,freq,inicioPag,itens});
     v.status = parseInt(document.getElementById("f-status").value,10);
-    itens.forEach(it=>registrarPeca(it.peca, it.tipo, it.custo));
+    itens.forEach(it=>registrarPeca(it.peca, it.tipo, it.custo, registrarForn(it.forn)));
     if(geraParcelas){
-      if(mudouPag || mudouValor || mudouN || mudouReceb || !v.parcelas) v.parcelas = gerarParcelas(venda,data,nparc);
+      if(mudou || !v.parcelas) v.parcelas = montarParcelas();
     } else {
       v.parcelas = null;
     }
   } else {
     vendas.unshift({
       id: Date.now().toString(36)+Math.random().toString(36).slice(2,6),
-      cliente, peca, venda, custo, data, pagamento, canal, nparc, tel, receb, itens,
+      cliente, peca, venda, custo, data, pagamento, canal, nparc, tel, receb, freq, inicioPag, itens,
       status: 0,
-      parcelas: geraParcelas ? gerarParcelas(venda,data,nparc) : null
+      parcelas: geraParcelas ? montarParcelas() : null
     });
     itens.forEach(it=>{
-      registrarPeca(it.peca, it.tipo, it.custo);
-      baixarEstoque(it.peca);
+      registrarPeca(it.peca, it.tipo, it.custo, registrarForn(it.forn));
     });
   }
   persistir();
@@ -932,7 +975,7 @@ function renderReceber(){
   document.getElementById("rec-vencidas").textContent = brl(vencidas);
 
   if(pend.length===0){
-    box.innerHTML = '<div class="empty"><span class="serif">Nada a receber</span>Parcelas de vendas no cartão (2x a 6x) aparecem aqui, com vencimento a cada 30 dias.</div>';
+    box.innerHTML = '<div class="empty"><span class="serif">Nada a receber</span>Parcelas de cartão (recebidas a cada 30 dias) e de vendas a prazo aparecem aqui, com o botão Cobrar.</div>';
     return;
   }
   box.innerHTML = pend.map(x=>{
@@ -1071,20 +1114,14 @@ function montarFornSelect(){
 function renderPecas(){
   const box = document.getElementById("lista-pecas");
   if(pecas.length===0){
-    box.innerHTML = '<div class="empty"><span class="serif">Nenhuma peça cadastrada</span>Toda peça vendida entra aqui sozinha. Ou cadastre manualmente as sobras e peças da maleta com estoque.</div>';
+    box.innerHTML = '<div class="empty"><span class="serif">Nenhuma peça cadastrada</span>Toda peça vendida entra aqui sozinha, com tipo, custo e fornecedor.</div>';
     return;
   }
   box.innerHTML = pecas.map(p=>{
-    const est = p.estoque||0;
     const fn = fornNome(p.fornecedorId);
     return '<div class="parc">'
       +'<div style="flex:1;min-width:0"><div class="who">'+esc(p.nome)+'</div>'
       +'<div class="venc">'+(p.tipo||"sem tipo")+(fn?' · '+esc(fn):'')+(p.custo?' · custo '+brl(p.custo):'')+'</div></div>'
-      +'<div class="est-ctrl">'
-      +'<button onclick="ajustarEstoqueId(\''+p.id+'\',-1)">−</button>'
-      +'<span class="n num'+(est===0?' zero':'')+'">'+est+'</span>'
-      +'<button onclick="ajustarEstoqueId(\''+p.id+'\',1)">+</button>'
-      +'</div>'
       +'<button class="edit-link" onclick="abrirEdicaoPeca(\''+p.id+'\')">editar</button>'
       +'</div>';
   }).join("");
@@ -1095,7 +1132,6 @@ function abrirNovaPeca(){
   document.getElementById("btn-excluir-peca").style.display = "none";
   document.getElementById("p-nome").value = "";
   document.getElementById("p-custo").value = "";
-  document.getElementById("p-estoque").value = "";
   montarTiposSelect();
   montarFornSelect();
   document.getElementById("p-tipo").value = "";
@@ -1114,7 +1150,6 @@ function abrirEdicaoPeca(id){
   document.getElementById("p-tipo").value = p.tipo||"";
   document.getElementById("p-forn").value = p.fornecedorId||"";
   document.getElementById("p-custo").value = p.custo ? numToStr(p.custo) : "";
-  document.getElementById("p-estoque").value = p.estoque||0;
   document.getElementById("overlay-peca").classList.add("on");
 }
 function montarTiposSelect(){
@@ -1136,13 +1171,12 @@ function salvarPeca(){
   const tipo = document.getElementById("p-tipo").value || null;
   const fornecedorId = document.getElementById("p-forn").value || null;
   const custo = parseValor(document.getElementById("p-custo").value);
-  const estoque = Math.max(0, parseInt(document.getElementById("p-estoque").value,10)||0);
   if(editandoPecaId){
     const p = pecas.find(x=>x.id===editandoPecaId);
-    if(p) Object.assign(p,{nome,tipo,custo,estoque,fornecedorId});
+    if(p) Object.assign(p,{nome,tipo,custo,fornecedorId});
   } else {
     if(findPeca(nome)){ toast("Já existe peça com esse nome"); return; }
-    pecas.unshift({id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, tipo, custo, estoque, fornecedorId});
+    pecas.unshift({id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, tipo, custo, fornecedorId});
   }
   persistirPecas();
   fecharModalPeca();
