@@ -345,45 +345,38 @@ input:focus,select:focus{border-color:var(--gold-soft)}
 
     <label>Pagamento</label>
     <div class="seg" id="seg-pag">
+      <button data-v="credito" onclick="segSel(this,'pag');toggleParcelas()">Crédito</button>
+      <button data-v="debito" onclick="segSel(this,'pag');toggleParcelas()">Débito</button>
       <button data-v="pix" onclick="segSel(this,'pag');toggleParcelas()">Pix</button>
-      <button data-v="cartao" onclick="segSel(this,'pag');toggleParcelas()">Cartão parcelado</button>
-      <button data-v="avista" onclick="segSel(this,'pag');toggleParcelas()">Cartão à vista</button>
-      <button data-v="dinheiro" onclick="segSel(this,'pag');toggleParcelas()">Dinheiro</button>
-      <button data-v="prazo" onclick="segSel(this,'pag');toggleParcelas()">A prazo</button>
+      <button data-v="pixprazo" onclick="segSel(this,'pag');toggleParcelas()">Pix a prazo</button>
     </div>
 
     <div id="parcelas-wrap" style="display:none">
-      <label>Quantidade de parcelas</label>
+      <label>Quantidade de pagamentos</label>
       <div class="seg" id="seg-nparc">
-        <button data-v="2" onclick="segSel(this,'nparc')">2x</button>
-        <button data-v="3" onclick="segSel(this,'nparc')">3x</button>
-        <button data-v="4" onclick="segSel(this,'nparc')">4x</button>
-        <button data-v="5" onclick="segSel(this,'nparc')">5x</button>
-        <button data-v="6" onclick="segSel(this,'nparc')">6x</button>
+        <button data-v="1" onclick="segSel(this,'nparc');toggleFreq()">1x</button>
+        <button data-v="2" onclick="segSel(this,'nparc');toggleFreq()">2x</button>
+        <button data-v="3" onclick="segSel(this,'nparc');toggleFreq()">3x</button>
+        <button data-v="4" onclick="segSel(this,'nparc');toggleFreq()">4x</button>
+        <button data-v="5" onclick="segSel(this,'nparc');toggleFreq()">5x</button>
+        <button data-v="6" onclick="segSel(this,'nparc');toggleFreq()">6x</button>
       </div>
-      <div id="receb-wrap">
-        <label>Como você recebe</label>
-        <div class="seg" id="seg-receb">
-          <button data-v="antecipado" onclick="segSel(this,'receb')">Cai na hora</button>
-          <button data-v="parcelado" onclick="segSel(this,'receb')">A cada 30 dias</button>
-        </div>
-        <div class="hint">Cai na hora (antecipação automática): a maquininha paga tudo de uma vez, com taxa maior — não gera nada na aba Receber; lembre de incluir a taxa no custo. A cada 30 dias: cada parcela vira uma cobrança na aba Receber.</div>
-      </div>
-      <div id="prazo-wrap" style="display:none">
+      <div id="freq-wrap">
         <label>Frequência</label>
         <div class="seg" id="seg-freq">
           <button data-v="semanal" onclick="segSel(this,'freq')">Semanal</button>
           <button data-v="mensal" onclick="segSel(this,'freq')">Mensal</button>
         </div>
-        <label>Data do primeiro pagamento</label>
-        <input id="f-inicio" type="date">
-        <div class="hint">A partir dessa data as demais parcelas são calculadas (de 7 em 7 dias no semanal, de 30 em 30 no mensal) e vão pra aba Receber com o botão Cobrar.</div>
       </div>
+      <label>Data do primeiro pagamento</label>
+      <input id="f-inicio" type="date">
+      <div class="hint">1x: o valor inteiro cai na data escolhida. De 2x a 6x: divido o valor em pagamentos iguais a partir dessa data (7 em 7 dias no semanal, 30 em 30 no mensal). Tudo vai pra aba Receber com o botão Cobrar.</div>
     </div>
 
     <label>Canal</label>
     <div class="seg" id="seg-canal">
       <button data-v="grupo" onclick="segSel(this,'canal')">Grupo VIP</button>
+      <button data-v="maleta" onclick="segSel(this,'canal')">Maleta salão</button>
       <button data-v="direto" onclick="segSel(this,'canal')">Direto</button>
       <button data-v="outro" onclick="segSel(this,'canal')">Outro</button>
     </div>
@@ -467,13 +460,14 @@ const KEY_P = "semijoias_pecas_v1";
 const KEY_F = "semijoias_fornecedores_v1";
 const KEY_BK = "semijoias_backup_ts";
 const STATUS = ["Encomendado","Pago","Pedido ao fornecedor","Recebido","Entregue"];
-const PAG_LABEL = {pix:"Pix",avista:"Cartão à vista",dinheiro:"Dinheiro"};
+const PAG_LABEL = {pix:"Pix",credito:"Crédito",debito:"Débito",avista:"Cartão à vista",dinheiro:"Dinheiro"};
 function pagLabel(v){
+  if(v.pagamento==="pixprazo") return (v.nparc>1 ? v.nparc+"x no Pix" : "Pix a prazo");
   if(v.pagamento==="cartao") return (v.nparc||3)+"x cartão";
   if(v.pagamento==="prazo") return (v.nparc||3)+"x a prazo"+(v.freq==="mensal"?" (mensal)":" (semanal)");
   return PAG_LABEL[v.pagamento] || v.pagamento;
 }
-const CANAL_LABEL = {grupo:"Grupo VIP",direto:"Direto",outro:"Outro"};
+const CANAL_LABEL = {grupo:"Grupo VIP",maleta:"Maleta salão",direto:"Direto",outro:"Outro"};
 
 let vendas = [];
 const TIPOS = ["Colar","Anel","Brinco","Conjunto","Pulseira","Bracelete","Pingente","Piercing fake"];
@@ -581,9 +575,9 @@ function abrirNova(){
   addItemRow();
   document.getElementById("f-data").value = hojeISO();
   preencherDatalist();
-  segReset("seg-pag"); segReset("seg-canal"); segReset("seg-nparc"); segReset("seg-receb"); segReset("seg-freq");
-  segSetVal("seg-pag","pix"); segSetVal("seg-canal","grupo"); segSetVal("seg-nparc","3");
-  segSetVal("seg-receb","antecipado"); segSetVal("seg-freq","semanal");
+  segReset("seg-pag"); segReset("seg-canal"); segReset("seg-nparc"); segReset("seg-freq");
+  segSetVal("seg-pag","pix"); segSetVal("seg-canal","grupo"); segSetVal("seg-nparc","1");
+  segSetVal("seg-freq","semanal");
   document.getElementById("f-inicio").value = "";
   toggleParcelas();
   previewLucro();
@@ -604,10 +598,13 @@ function abrirEdicao(id){
   its.forEach(it=>addItemRow(it));
   document.getElementById("f-data").value = v.data;
   document.getElementById("f-status").value = String(v.status);
-  segReset("seg-pag"); segReset("seg-canal"); segReset("seg-nparc"); segReset("seg-receb"); segReset("seg-freq");
-  segSetVal("seg-pag", v.pagamento); segSetVal("seg-canal", v.canal);
-  segSetVal("seg-nparc", String(v.nparc||3));
-  segSetVal("seg-receb", v.receb || (v.parcelas ? "parcelado" : "antecipado"));
+  segReset("seg-pag"); segReset("seg-canal"); segReset("seg-nparc"); segReset("seg-freq");
+  let pagUI = v.pagamento;
+  if(pagUI==="cartao" || pagUI==="avista") pagUI = "credito";
+  if(pagUI==="dinheiro") pagUI = "pix";
+  if(pagUI==="prazo") pagUI = "pixprazo";
+  segSetVal("seg-pag", pagUI); segSetVal("seg-canal", v.canal);
+  segSetVal("seg-nparc", String(v.nparc||1));
   segSetVal("seg-freq", v.freq || "semanal");
   document.getElementById("f-inicio").value = v.inicioPag || "";
   toggleParcelas();
@@ -704,16 +701,6 @@ function pecaAuto(inp){
 }
 
 // ================= salvar / excluir =================
-function gerarParcelas(venda, data, n){
-  n = n || 3;
-  const p = Math.round((venda/n)*100)/100;
-  const ultima = Math.round((venda - (n-1)*p)*100)/100;
-  const out = [];
-  for(let i=1;i<=n;i++){
-    out.push({venc: addMeses(data,i), valor: i===n ? ultima : p, pago:false});
-  }
-  return out;
-}
 function gerarParcelasPrazo(venda, n, freq, inicio){
   n = n || 3;
   const p = Math.round((venda/n)*100)/100;
@@ -727,11 +714,13 @@ function gerarParcelasPrazo(venda, n, freq, inicio){
 }
 
 function toggleParcelas(){
-  const pag = segVal("seg-pag");
-  const cartao = pag==="cartao", prazo = pag==="prazo";
-  document.getElementById("parcelas-wrap").style.display = (cartao||prazo) ? "block" : "none";
-  document.getElementById("receb-wrap").style.display = cartao ? "block" : "none";
-  document.getElementById("prazo-wrap").style.display = prazo ? "block" : "none";
+  const on = segVal("seg-pag")==="pixprazo";
+  document.getElementById("parcelas-wrap").style.display = on ? "block" : "none";
+  toggleFreq();
+}
+function toggleFreq(){
+  const n = segVal("seg-nparc") || "1";
+  document.getElementById("freq-wrap").style.display = n==="1" ? "none" : "block";
 }
 
 // ================= clientes =================
@@ -826,27 +815,24 @@ function salvarVenda(){
   const tel = document.getElementById("f-tel").value.trim();
 
   if(itens.length===0 || itens.some(i=>!i.peca || i.venda<=0)){ toast("Preencha nome e valor de cada peça"); return; }
-  if((pagamento==="cartao"||pagamento==="prazo") && !cliente){ toast("Venda parcelada precisa do nome da cliente"); return; }
+  if(pagamento==="pixprazo" && !cliente){ toast("Pix a prazo precisa do nome da cliente"); return; }
 
-  const usaParc = pagamento==="cartao" || pagamento==="prazo";
-  const nparc = usaParc ? parseInt(segVal("seg-nparc")||"3",10) : null;
-  const receb = pagamento==="cartao" ? (segVal("seg-receb")||"antecipado") : null;
-  const freq = pagamento==="prazo" ? (segVal("seg-freq")||"semanal") : null;
-  const inicioPag = pagamento==="prazo" ? document.getElementById("f-inicio").value : null;
-  if(pagamento==="prazo" && !inicioPag){ toast("Escolha a data do primeiro pagamento"); return; }
-  const geraParcelas = (pagamento==="cartao" && receb==="parcelado") || pagamento==="prazo";
+  const usaParc = pagamento==="pixprazo";
+  const nparc = usaParc ? parseInt(segVal("seg-nparc")||"1",10) : null;
+  const freq = usaParc ? (segVal("seg-freq")||"semanal") : null;
+  const inicioPag = usaParc ? document.getElementById("f-inicio").value : null;
+  if(usaParc && !inicioPag){ toast("Escolha a data do pagamento"); return; }
+  const geraParcelas = usaParc;
 
   function montarParcelas(){
-    return pagamento==="prazo"
-      ? gerarParcelasPrazo(venda, nparc, freq, inicioPag)
-      : gerarParcelas(venda, data, nparc);
+    return gerarParcelasPrazo(venda, nparc, freq, inicioPag);
   }
 
   if(editandoId){
     const v = vendas.find(x=>x.id===editandoId);
     const mudou = v.pagamento!==pagamento || v.venda!==venda || v.nparc!==nparc
-      || v.receb!==receb || v.freq!==freq || v.inicioPag!==inicioPag;
-    Object.assign(v,{cliente,peca,venda,custo,data,pagamento,canal,nparc,tel,receb,freq,inicioPag,itens});
+      || v.freq!==freq || v.inicioPag!==inicioPag;
+    Object.assign(v,{cliente,peca,venda,custo,data,pagamento,canal,nparc,tel,freq,inicioPag,itens});
     v.status = parseInt(document.getElementById("f-status").value,10);
     itens.forEach(it=>registrarPeca(it.peca, it.tipo, it.custo, registrarForn(it.forn)));
     if(geraParcelas){
@@ -857,7 +843,7 @@ function salvarVenda(){
   } else {
     vendas.unshift({
       id: Date.now().toString(36)+Math.random().toString(36).slice(2,6),
-      cliente, peca, venda, custo, data, pagamento, canal, nparc, tel, receb, freq, inicioPag, itens,
+      cliente, peca, venda, custo, data, pagamento, canal, nparc, tel, freq, inicioPag, itens,
       status: 0,
       parcelas: geraParcelas ? montarParcelas() : null
     });
@@ -975,20 +961,22 @@ function renderReceber(){
   document.getElementById("rec-vencidas").textContent = brl(vencidas);
 
   if(pend.length===0){
-    box.innerHTML = '<div class="empty"><span class="serif">Nada a receber</span>Parcelas de cartão (recebidas a cada 30 dias) e de vendas a prazo aparecem aqui, com o botão Cobrar.</div>';
+    box.innerHTML = '<div class="empty"><span class="serif">Nada a receber</span>Pagamentos de Pix a prazo aparecem aqui na data combinada, com o botão Cobrar pronto pro WhatsApp.</div>';
     return;
   }
   box.innerHTML = pend.map(x=>{
     const late = x.p.venc < hoje;
+    const n = x.v.parcelas.length;
+    const rotulo = n>1 ? ((x.i+1)+"/"+n) : "pagamento";
     const primeiroNome = (x.v.cliente||"").trim().split(" ")[0];
-    const msg = "Oi "+(primeiroNome||"tudo bem?")+"! Passando pra lembrar da parcela "
-      +(x.i+1)+"/"+x.v.parcelas.length+" de "+brl(x.p.valor)
-      +(late ? ", que venceu dia " : ", que vence dia ")+fmtData(x.p.venc)
+    const msg = "Oi "+(primeiroNome||"tudo bem?")+"! Passando pra lembrar do "
+      +(n>1 ? "pagamento "+(x.i+1)+"/"+n : "pagamento combinado")+" de "+brl(x.p.valor)
+      +(late ? ", que venceu dia " : ", pra dia ")+fmtData(x.p.venc)
       +". Qualquer coisa me chama! 💛";
     const wa = waHref(x.v.tel, msg);
     const cobrar = wa ? '<a class="cobrar" href="'+wa+'" target="_blank" rel="noopener">Cobrar</a>' : '';
     return '<div class="parc">'
-      +'<div><div class="who">'+esc(x.v.cliente||x.v.peca)+' · '+(x.i+1)+'/'+x.v.parcelas.length+'</div>'
+      +'<div><div class="who">'+esc(x.v.cliente||x.v.peca)+' · '+rotulo+'</div>'
       +'<div class="venc'+(late?" late":"")+'">vence '+fmtData(x.p.venc)+(late?" · vencida":"")+'</div></div>'
       +'<div class="v num">'+brl(x.p.valor)+'</div>'
       +'<div class="parc-actions">'
